@@ -1,27 +1,27 @@
+import type { Request, Response } from 'express';
 
-
-const createProducto = (req: any, res: any) => {
+const createProducto = (req: Request, res: Response) => {
     res.json({
         ok: true,
         message: 'crearProducto'
     })
 }
 
-const updateProducto = (req: any, res: any) => {
+const updateProducto = (req: Request, res: Response) => {
     res.json({
         ok: true,
         message: 'actualizarProducto'
     })
 }
 
-const getProductos = (req: any, res: any) => {
+const getProductos = (req: Request, res: Response) => {
     res.json({
         ok: true,
         message: 'getProductos'
     })
 }
 
-const deleteProducto = (req: any, res: any) => {
+const deleteProducto = (req: Request, res: Response) => {
     res.json({
         ok: true,
         message: 'deleteProducto'
@@ -29,9 +29,3 @@ const deleteProducto = (req: any, res: any) => {
 }
 
 
-module.exports = {
-    createProducto,
-    updateProducto,
-    getProductos,
-    deleteProducto
-}
