@@ -1,15 +1,15 @@
 const express = require('express');
-
+require('dotenv').config({ path: './.env'});
 
 const app = express();
 
-app.get('/', (req: any, res: any) => {
-    res.json({
-        ok: true,
-        message: 'Server is running'
-    })
-});
-const port = process.env.PORT || 4000;
+// Directorio publico
+app.use( express.static('public') );
+
+//Rutas
+app.use('/api/products', require('./routes/products.routes') );
+
+const port = process.env.PORT;
 
 app.listen( port, () => {
     console.log('Server running on port: ', port);
