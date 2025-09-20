@@ -9,6 +9,7 @@ lerna-debug.log*
 
 pgadmin
 postgres
+keys
 node_modules
 dist
 dist-ssr
