@@ -3,8 +3,6 @@ import cors from 'cors';
 import multer from 'multer';
 import { Storage } from '@google-cloud/storage';
 import vision from '@google-cloud/vision';
-import path from 'path';
-import fs from 'fs';
 import dotenv from 'dotenv';
 
 import productsRoutes from "./routes/products.routes";
