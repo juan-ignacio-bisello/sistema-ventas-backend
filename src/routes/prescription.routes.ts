@@ -4,7 +4,7 @@ import { upload } from "../middlewares/upload.middleware";
 
 const router = Router();
 
-router.post("/upload", upload.single("file"), uploadPrescription);
+router.post("/upload", upload.single("file"), uploadPrescription );
 
 router.get("/prueba", (_req, res) => {
   res.json({

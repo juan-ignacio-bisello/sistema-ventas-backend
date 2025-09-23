@@ -4,6 +4,7 @@ import { extractText } from '../service/vision.service';
 import { parsePrescription } from '../service/parce.service';
 
 export async function uploadPrescription(req: Request, res: Response) {
+  
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const filePath = req.file.path;
 
