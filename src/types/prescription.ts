@@ -1,14 +1,13 @@
-export interface EyeData {
-  raw: string;
-  esf?: string | null;
-  cil?: string | null;
-  eje?: string | null;
-  add?: string | null;
-}
-
-export interface PrescriptionParsed {
-  od: EyeData | null;
-  oi: EyeData | null;
-  observaciones: string | null;
-  rawLines?: string[]; // opcional para debug
+// Define la interfaz para datos genéricos de recetas
+export interface PrescriptionData {
+  centro?: string;
+  paciente?: { nombre: string };
+  obraSocial?: string;
+  numeroObraSocial?: string;
+  prescripcion?: {
+    OD?: { esfera?: string; cilindro?: string; eje?: string };
+    OI?: { esfera?: string; cilindro?: string; eje?: string };
+  };
+  fecha?: string;
+  otrosDatos?: { [key: string]: string }; // Para datos adicionales no estructurados
 }

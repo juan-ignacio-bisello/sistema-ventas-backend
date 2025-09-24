@@ -1,135 +1,91 @@
-import { PrescriptionParsed, EyeData } from "../types/prescription";
+import { PrescriptionData } from "../types/prescription";
 
-function normalizeLineForOCR(l: string): string {
-  return l
-    .replace(/×/g, "x")
-    .replace(/\s+/g, " ")
-    .replace(/\b0D\b/ig, "OD")
-    .replace(/\b0I\b/ig, "OI")
-    .replace(/\bO\s*D\b/ig, "OD")
-    .replace(/\bO\s*I\b/ig, "OI")
-    .trim();
-}
+export function parsePrescription(text: string): PrescriptionData {
+  const result: PrescriptionData = {};
+  const lines = text.split('\n').map(line => line.trim().toLowerCase());
 
-export function parsePrescription(text: string): PrescriptionParsed {
-  const rawLines = text.split(/\r?\n/).map(l => l.trim());
-  const lines = rawLines.map(normalizeLineForOCR).filter(Boolean);
-
-  const fullText = lines.join("\n");
-
-  // ADD global
-  const globalAdd = fullText.match(/(?:\badd\b|adici[oó]n|adición)[:\s]*([+-]?\d+(?:\.\d+)?)/i)?.[1] ?? null;
-
-  const signatureRegex = /^(Firma|Dr\.?|Dra\.?|Médico|Mat[rí]cula|Lic\.|Especialista)\b/i;
-
-  function findEyeIndex(tagRegex: RegExp) {
-    for (let i = 0; i < lines.length; i++) {
-      if (tagRegex.test(lines[i] ?? '')) return i;
-    }
-    return -1;
+  // Extraer centro (líneas con títulos profesionales o instituciones, evitando fragmentos sueltos)
+  const centroLines = lines.filter(line =>
+    (line.includes('dra.') || line.includes('dr.') || line.includes('médica') || line.includes('oftalmología') || line.includes('hospital')) &&
+    line.length > 10 // Filtra fragmentos cortos
+  );
+  if (centroLines.length > 0) {
+    result.centro = centroLines
+      .join(' ')
+      .replace(/(dra\.|dr\.)\s*/i, '$1 ')
+      .replace(/ica clvil/, 'ex-médica civil') // Corrección manual aproximada
+      .replace(/tar central/, 'hospital central')
+      .trim();
   }
 
-  const odTagRegex = /\b(?:OD|O\.D\.|0D)\b/i;
-  const oiTagRegex = /\b(?:OI|OS|O\.I\.|O\.S\.|0I|0S)\b/i;
-
-  const odIndex = findEyeIndex(odTagRegex);
-  const oiIndex = findEyeIndex(oiTagRegex);
-
-  function contentAfterTag(line: string, tagRegex: RegExp, nextLine?: string): string {
-    const after = line.replace(new RegExp(`.*${tagRegex.source}`, "i"), "").trim();
-    if (after) return after;
-    return (nextLine || "").trim();
+  // Extraer nombre del paciente (línea con nombre completo, priorizando líneas con dos palabras)
+  const patientLine = lines.find(line => /[a-z]+ [a-z]+/.test(line) && !line.includes('dra.') && !line.includes('dr.') && line.length > 5);
+  if (patientLine) {
+    result.paciente = { nombre: patientLine.trim() || 'Desconocido' };
   }
 
-  function parseEyeTxt(txt: string): Partial<EyeData> {
-    const out: Partial<EyeData> = { raw: txt.trim() };
-    if (!txt) return out;
-
-    const addMatch = txt.match(/(?:\badd\b|adici[oó]n|adición)[:\s]*([+-]?\d+(?:\.\d+)?)/i);
-    if (addMatch) out.add = addMatch[1] ?? null;
-
-    const compact = txt.match(/([+-]?\d+(?:\.\d+)?|plano)\s+([+-]?\d+(?:\.\d+)?)(?:\s*[x×]\s*([0-9]{1,3}))?/i);
-    if (compact) {
-      out.esf = compact[1] && compact[1].toLowerCase() === "plano" ? "plano" : compact[1] ?? null;
-      out.cil = compact[2]  ?? null;
-      if (compact[3]) out.eje = String(Number(compact[3]));
-      return out;
-    }
-
-    const cylAxis = txt.match(/([+-]?\d+(?:\.\d+)?)[\s]*[x×][\s]*([0-9]{1,3})/i);
-    if (cylAxis) {
-      out.cil = cylAxis[1] ?? '';
-      out.eje = String(Number(cylAxis[2]));
-      const before = txt.slice(0, cylAxis.index);
-      const tokens = before.match(/([+-]?\d+(?:\.\d+)?|plano)/gi);
-      if (tokens && tokens.length) out.esf = tokens[tokens.length - 1] ?? '';
-      return out;
-    }
-
-    const esfL = txt.match(/(?:esf(?:era)?|sph)[:\s]*([+-]?\d+(?:\.\d+)?|plano)/i)?.[1];
-    const cilL = txt.match(/(?:cil(?:indro)?|cyl)[:\s]*([+-]?\d+(?:\.\d+)?)/i)?.[1];
-    const ejeL = txt.match(/(?:eje|axis)[:\s]*([0-9]{1,3})/i)?.[1];
-    if (esfL) out.esf = esfL;
-    if (cilL) out.cil = cilL;
-    if (ejeL) out.eje = String(Number(ejeL));
-    if (esfL || cilL || ejeL) return out;
-
-    const tokens = txt.match(/([+-]?\d+(?:\.\d+)?|plano|[0-9]{1,3}°?)/gi)?.map(t => t.replace("°", ""));
-    if (tokens && tokens.length) {
-      if (!out.esf && tokens[0]) out.esf = tokens[0];
-      if (!out.cil && tokens[1]) out.cil = tokens[1];
-      if (!out.eje && tokens[2] && /^[0-9]{1,3}$/.test(tokens[2])) out.eje = String(Number(tokens[2]));
-    }
-
-    return out;
+  // Extraer obra social (líneas con abreviaturas comunes)
+  const obraSocialLine = lines.find(line => /(smg|osde|galeno|swiss|medife)/i.test(line));
+  if (obraSocialLine) {
+    result.obraSocial = obraSocialLine.match(/(smg|osde|galeno|swiss|medife)/i)?.[0] || 'No especificada';
   }
 
-  function buildEye(i: number): EyeData | null {
-    if (i < 0 || i >= lines.length) return null;
-    const line = lines[i];
-    const nextLine = lines[i + 1];
-    const txt = contentAfterTag(line ?? '', /\b(OD|O\.D\.|0D|OI|OS|O\.I\.|O\.S\.|0I|0S)\b/i, nextLine);
-    const parsed = parseEyeTxt(txt || "");
-    return {
-      raw: txt || "",
-      esf: parsed.esf ?? null,
-      cil: parsed.cil ?? null,
-      eje: parsed.eje ?? null,
-      add: parsed.add ?? null
-    };
+  // Extraer número de obra social (líneas con números largos, priorizando secuencias completas)
+  const numeroObraSocialLine = lines.find(line => /\d{3,}\s*\d{6,}/.test(line));
+  if (numeroObraSocialLine) {
+    result.numeroObraSocial = numeroObraSocialLine.match(/\d{3,}\s*\d{6,}/)?.[0].replace(/\s+/g, '') || 'No especificado';
   }
 
-  const od = buildEye(odIndex);
-  const oi = buildEye(oiIndex);
-
-  if (globalAdd) {
-    if (od && !od.add) od.add = globalAdd;
-    if (oi && !oi.add) oi.add = globalAdd;
-  }
-
-  const eyeIndices = [odIndex, oiIndex].filter(i => i >= 0);
-  const lastEyeIndex = eyeIndices.length ? Math.max(...eyeIndices) : -1;
-
-  let observaciones: string | null = null;
-  if (lastEyeIndex >= 0) {
-    const sigIdx = lines.findIndex((l, idx) => idx > lastEyeIndex && signatureRegex.test(l));
-    const obsSlice = sigIdx !== -1 ? lines.slice(lastEyeIndex + 1, sigIdx) : lines.slice(lastEyeIndex + 1);
-    const obsText = obsSlice.join(" ").trim();
-    if (obsText) observaciones = obsText;
-  }
-
-  if (!observaciones) {
-    const obsMatch = fullText.match(/observaciones[:\-]?\s*([\s\S]+)/i);
-    if (obsMatch) {
-      const after = obsMatch[1]?.split(/\r?\n/).map(s => s.trim()).filter(Boolean).join(" ");
-      observaciones = after || null;
+  // Extraer prescripción OD (formato pre-establecido)
+  const odMatch = lines.find(line => {
+    return /od\s*(?:-|\sesf-)\s*[-+]?[0-7](\.\d{1,2})?\s*(?:-|\scil\s*-)\s*[-+]?[0-7](\.\d{1,2})?\s*x\s*[0-180]°?/.test(line);
+  });
+  if (odMatch) {
+    const [, esfera, , cilindro, , eje] = odMatch.match(/od\s*(?:-|\sesf-)\s*([-+]?[0-7](\.\d{1,2})?)\s*(?:-|\scil\s*-)\s*([-+]?[0-7](\.\d{1,2})?)\s*x\s*([0-180]°?)/i) || [];
+    if (esfera && cilindro && eje) {
+      result.prescripcion = result.prescripcion || {};
+      result.prescripcion.OD = { esfera, cilindro, eje };
     }
   }
 
-  return {
-    od,
-    oi,
-    observaciones,
-    rawLines
-  };
+  // Extraer prescripción OI (formato pre-establecido)
+  const oiMatch = lines.find(line => {
+    return /oi\s*(?:-|\sesf-)\s*[-+]?[0-7](\.\d{1,2})?\s*(?:-|\scil\s*-)\s*[-+]?[0-7](\.\d{1,2})?\s*x\s*[0-180]°?/.test(line);
+  });
+  if (oiMatch) {
+    const [, esfera, , cilindro, , eje] = oiMatch.match(/oi\s*(?:-|\sesf-)\s*([-+]?[0-7](\.\d{1,2})?)\s*(?:-|\scil\s*-)\s*([-+]?[0-7](\.\d{1,2})?)\s*x\s*([0-180]°?)/i) || [];
+    if (esfera && cilindro && eje) {
+      result.prescripcion = result.prescripcion || {};
+      result.prescripcion.OI = { esfera, cilindro, eje };
+    }
+  }
+
+  // Extraer fecha (patrón flexible para DD/MM/YY o DD-MM-YYYY)
+  const dateMatch = lines.find(line => /\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(line));
+  if (dateMatch) {
+    result.fecha = dateMatch;
+  }
+
+  // Capturar otros datos no estructurados (excluyendo líneas ya procesadas)
+  const processedLines = [
+    result.centro || '',
+    result.paciente?.nombre || '',
+    result.obraSocial || '',
+    result.numeroObraSocial || '',
+    result.fecha || '',
+    odMatch || '',
+    oiMatch || ''
+  ].join(' ');
+  const otherData = lines.filter(line => !processedLines.includes(line) && line.length > 2);
+  if (otherData.length > 0) {
+    result.otrosDatos = otherData.reduce((acc, line) => {
+      const [key, value] = line.split(':').map(s => s.trim()) || [line, ''];
+      if (typeof key !== 'undefined' && key !== '') {
+        acc[key] = value || line;
+      }
+      return acc;
+    }, {} as { [key: string]: string });
+  }
+
+  return result;
 }

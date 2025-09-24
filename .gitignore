@@ -10,6 +10,7 @@ lerna-debug.log*
 pgadmin
 postgres
 keys
+uploads
 node_modules
 dist
 dist-ssr

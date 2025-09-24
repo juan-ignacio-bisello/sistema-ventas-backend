@@ -27,5 +27,3 @@ export const deleteProducto = (req: Request, res: Response) => {
         message: 'deleteProducto'
     })
 }
-
-
